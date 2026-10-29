@@ -15,7 +15,7 @@ public class Main {
             this.start = start;
         }
 
-        void add(String left, List<String> right) {
+        void add(String left, List<String> right) { //добавление правил без повторок
             rules.computeIfAbsent(left, k -> new LinkedHashSet<>()).add(List.copyOf(right));
         }
 
@@ -26,22 +26,22 @@ public class Main {
                 throw new IllegalArgumentException("Неверное правило: " + line);
             }
 
-            for (String variant : sides[1].split("\\|", -1)) {
+            for (String variant : sides[1].split("\\|", -1)) { //разделяем правую часть
                 variant = variant.trim();
 
                 if (variant.isEmpty()) {
                     throw new IllegalArgumentException("Пустая альтернатива: " + line);
                 }
 
-                if (variant.equals(EPS)) {
+                if (variant.equals(EPS)) { //эпсилон?? добавляем как пустую правую часть
                     add(sides[0], List.of());
                     continue;
                 }
 
-                Matcher matcher = SYMBOL.matcher(variant);
+                Matcher matcher = SYMBOL.matcher(variant); //ищем отдельные части из правой части
                 List<String> right = new ArrayList<>();
 
-                while (matcher.find()) {
+                while (matcher.find()) { //ищем символы в правой части пока не закончатся
                     String token = matcher.group();
 
                     if (token.equals(EPS)) {
@@ -51,11 +51,11 @@ public class Main {
                     right.add(token);
                 }
 
-                add(sides[0], right);
+                add(sides[0], right); //добавляем правое правило в грамматику
             }
         }
 
-        boolean isUnit(List<String> right) {
+        boolean isUnit(List<String> right) { //цепное ?????
             return right.size() == 1 && rules.containsKey(right.get(0));
         }
 
@@ -63,8 +63,8 @@ public class Main {
             Set<String> nullable = new LinkedHashSet<>();
 
             for (var entry : rules.entrySet()) {
-                if (entry.getValue().contains(List.of())) {
-                    nullable.add(entry.getKey());
+                if (entry.getValue().contains(List.of())) { //есть пустое правило??
+                    nullable.add(entry.getKey()); //добавляем такой нетерминал
                 }
             }
 
@@ -77,8 +77,8 @@ public class Main {
 
                 for (var entry : rules.entrySet()) {
                     for (List<String> right : entry.getValue()) {
-                        if (right.stream().allMatch(nullable::contains)) {
-                            next.add(entry.getKey());
+                        if (right.stream().allMatch(nullable::contains)) { //могут ли все нетерминалы попасть в набор
+                            next.add(entry.getKey()); //тогда S в набор добавим
                         }
                     }
                 }
@@ -94,14 +94,14 @@ public class Main {
 
             Grammar result = new Grammar(start);
 
-            for (String left : rules.keySet()) {
+            for (String left : rules.keySet()) { //переносим нетерминалы в грамматику без правил
                 result.rules.put(left, new LinkedHashSet<>());
             }
-
+            //перебираем старые правила и создаем новые с удал-м тех которые можно удалить
             for (var entry : rules.entrySet()) {
-                for (List<String> right : entry.getValue()) {
+                for (List<String> right : entry.getValue()) { //варианты правой части
                     if (!right.isEmpty()) {
-                        expand(
+                        expand( //возможные варианты правила с удалением тех, которые могут изчезнуть
                                 result,
                                 entry.getKey(),
                                 right,
@@ -113,7 +113,7 @@ public class Main {
                 }
             }
 
-            if (nullable.contains(start)) {
+            if (nullable.contains(start)) { //если S дает эпсилон
                 String newStart = "S0";
                 int number = 0;
 
@@ -121,6 +121,7 @@ public class Main {
                     newStart = "S" + ++number;
                 }
 
+                //переставляем правила
                 LinkedHashMap<String, LinkedHashSet<List<String>>> reordered =
                         new LinkedHashMap<>();
 
@@ -142,6 +143,7 @@ public class Main {
             return result;
         }
 
+        //используется ли символ в правых частях правил грамматики
         boolean appearsInRight(String symbol) {
             for (var variants : rules.values()) {
                 for (List<String> right : variants) {
@@ -154,6 +156,7 @@ public class Main {
             return false;
         }
 
+        // Создаём разные варианты правил, удаляя символы, которые могут исчезнуть (ε)
         void expand(
                 Grammar result,
                 String left,
@@ -162,29 +165,38 @@ public class Main {
                 List<String> current,
                 Set<String> nullable
         ) {
+            // Проверяем, обработали ли все символы правой части
             if (index == right.size()) {
+                // Если вариант не пустой и не ведёт символ на самого себя
                 if (!current.isEmpty()
                         && !(current.size() == 1 && current.get(0).equals(left))) {
                     result.add(left, current);
                 }
-
                 return;
             }
 
+            // Берём текущий символ правой части
             String symbol = right.get(index);
-
             current.add(symbol);
+
+            // Переходим к обработке следующего символа
             expand(result, left, right, index + 1, current, nullable);
+
+            // Убираем символ, чтобы попробовать другой вариант
             current.remove(current.size() - 1);
 
+            // Если символ может исчезнуть, пробуем вариант без него
             if (nullable.contains(symbol)) {
                 expand(result, left, right, index + 1, current, nullable);
             }
         }
 
+
+        /// Устраняем цепные правила вида A → B
         Grammar removeUnit() {
             Grammar result = new Grammar(start);
 
+            // Создаём пустые наборы правил для всех нетерминалов
             for (String left : rules.keySet()) {
                 result.rules.put(left, new LinkedHashSet<>());
             }
@@ -196,24 +208,28 @@ public class Main {
                 reachable.add(left);
                 queue.add(left);
 
+                // Ищем все нетерминалы, связанные цепными правилами
                 while (!queue.isEmpty()) {
-                    String current = queue.remove();
+                    String current = queue.remove(); //берем и удаляем
 
-                    for (List<String> right : rules.get(current)) {
-                        if (isUnit(right) && reachable.add(right.get(0))) {
+                    for (List<String> right : rules.get(current)) { //перебираем его правила
+                        if (isUnit(right) && reachable.add(right.get(0))) { //проверяем цепное
                             queue.add(right.get(0));
                         }
                     }
                 }
 
+                // Выводим найденные цепные связи
                 Set<String> chain = new LinkedHashSet<>(reachable);
-                chain.remove(left);
+                chain.remove(left); //из наолра удаляем исх нетерм
 
                 System.out.println("N(" + left + ") = " + chain);
 
+                // Перебираем все найденные связанные нетерминалы
                 for (String symbol : reachable) {
+                    // Перебираем правила каждого нетерминала
                     for (List<String> right : rules.get(symbol)) {
-                        if (!isUnit(right)) {
+                        if (!isUnit(right)) { //цепные пропуск
                             result.add(left, right);
                         }
                     }
@@ -229,6 +245,7 @@ public class Main {
             for (var entry : rules.entrySet()) {
                 List<String> variants = new ArrayList<>();
 
+                //Подготавливаем каждый вариант правой части
                 for (List<String> right : entry.getValue()) {
                     variants.add(
                             right.isEmpty() ? EPS : String.join(" ", right)
@@ -306,10 +323,9 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
 
         while (true) {
-            System.out.println("\n=== УПРОЩЕНИЕ ГРАММАТИК ===");
-            System.out.println("1 — удалить пустые правила");
-            System.out.println("2 — удалить цепные правила");
-            System.out.println("3 — удалить пустые и цепные правила");
+            System.out.println("\n=== ПРИВЕДЕНИЕ ГРАММАТИК ===");
+            System.out.println("1 — устранение пустых правил");
+            System.out.println("2 — устранение цепных правил");
             System.out.println("0 — выход");
             System.out.print("Выбор: ");
 
@@ -324,7 +340,7 @@ public class Main {
                 break;
             }
 
-            if (!Set.of("1", "2", "3").contains(choice)) {
+            if (!choice.equals("1") && !choice.equals("2")) {
                 System.out.println("Неверный пункт меню.");
                 continue;
             }
@@ -335,29 +351,16 @@ public class Main {
                 System.out.println("\nИсходная грамматика:");
                 grammar.print();
 
-                if (!choice.equals("2")) {
-                    System.out.println(
-                            "\nЭтап 1. Устранение пустых правил:"
-                    );
-
+                if (choice.equals("1")) {
+                    System.out.println("\nУстранение пустых правил:");
                     grammar = grammar.removeEmpty();
-
-                    System.out.println("Полученная грамматика:");
-                    grammar.print();
-                }
-
-                if (!choice.equals("1")) {
-                    System.out.println(
-                            "\nЭтап "
-                                    + (choice.equals("3") ? "2" : "1")
-                                    + ". Устранение цепных правил:"
-                    );
-
+                } else {
+                    System.out.println("\nУстранение цепных правил:");
                     grammar = grammar.removeUnit();
-
-                    System.out.println("Полученная грамматика:");
-                    grammar.print();
                 }
+
+                System.out.println("\nПолученная грамматика:");
+                grammar.print();
 
             } catch (IllegalArgumentException e) {
                 System.out.println("Ошибка: " + e.getMessage());
